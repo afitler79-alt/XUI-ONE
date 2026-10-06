@@ -8105,7 +8105,33 @@ class WebKioskWindow(QtWidgets.QMainWindow):
         self.setStyleSheet('background:#000;')
         self.view = QtWebEngineWidgets.QWebEngineView(self)
         self._configure_web_runtime()
-        self.setCentralWidget(self.view)
+        root = QtWidgets.QWidget(self)
+        layout = QtWidgets.QVBoxLayout(root)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        toolbar = QtWidgets.QFrame(root)
+        toolbar.setStyleSheet('QFrame { background:#111a15; border-bottom:1px solid #31523c; } QPushButton { color:#eaf2ec; background:#1b3022; border:1px solid #42694a; padding:6px 10px; } QLineEdit { color:#f3f7f4; background:#0b140f; border:1px solid #3a5943; padding:7px; }')
+        toolbar_layout = QtWidgets.QHBoxLayout(toolbar)
+        toolbar_layout.setContentsMargins(8, 6, 8, 6)
+        toolbar_layout.setSpacing(6)
+        back_button = QtWidgets.QPushButton('Back')
+        forward_button = QtWidgets.QPushButton('Forward')
+        reload_button = QtWidgets.QPushButton('Reload')
+        self.address = QtWidgets.QLineEdit(str(url or ''))
+        self.address.setPlaceholderText('Enter a web address')
+        self.address.returnPressed.connect(self._navigate_address)
+        back_button.clicked.connect(self.view.back)
+        forward_button.clicked.connect(self.view.forward)
+        reload_button.clicked.connect(self.view.reload)
+        toolbar_layout.addWidget(back_button)
+        toolbar_layout.addWidget(forward_button)
+        toolbar_layout.addWidget(reload_button)
+        toolbar_layout.addWidget(self.address, 1)
+        layout.addWidget(toolbar)
+        layout.addWidget(self.view, 1)
+        self.setCentralWidget(root)
+        self.view.urlChanged.connect(lambda qurl: self.address.setText(qurl.toString()))
+        self.view.titleChanged.connect(self.setWindowTitle)
         self.view.load(QtCore.QUrl(url))
         self._esc = QtWidgets.QShortcut(QtGui.QKeySequence(QtCore.Qt.Key_Escape), self)
         self._esc.activated.connect(self.close)
@@ -8128,6 +8154,14 @@ class WebKioskWindow(QtWidgets.QMainWindow):
             self._guide_keys.add(key_super_r)
         self._guide_shortcuts = []
         self._setup_gamepad()
+
+    def _navigate_address(self):
+        text = str(self.address.text() or '').strip()
+        if not text:
+            return
+        if '://' not in text:
+            text = 'https://' + text
+        self.view.load(QtCore.QUrl(text))
 
     def _configure_web_runtime(self):
         if QtWebEngineWidgets is None or self.view is None:
@@ -11674,6 +11708,9 @@ exit 1
                 return
             except Exception:
                 pass
+        if self._is_windows_runtime():
+            self._msg('Built-in browser unavailable', 'Install PyQtWebEngine in the Python environment used by XUI, then restart the dashboard.')
+            return
         kiosk = XUI_HOME / 'bin' / 'xui_browser.sh'
         if kiosk.exists():
             self._run('/bin/sh', ['-c', f'"{kiosk}" --kiosk "{url}"'])
@@ -11703,6 +11740,9 @@ exit 1
         if not u:
             return
         if self._is_windows_runtime():
+            if QtCore.QUrl(u).scheme().lower() in ('http', 'https'):
+                self._open_url(u)
+                return
             qurl = QtCore.QUrl(u)
             if QtGui.QDesktopServices.openUrl(qurl):
                 return
@@ -12823,7 +12863,7 @@ exit 1
             else:
                 self._launch_local_python_app('Store', 'bin/xui_store_modern.py')
         elif action == 'Web Browser':
-            self._run('/bin/sh', ['-c', f'{xui}/bin/xui_browser.sh --hub https://www.xbox.com'])
+            self._open_url('https://www.xbox.com')
         elif action == 'Close Active App':
             out = subprocess.getoutput(f'/bin/sh -c "{xui}/bin/xui_close_active_app.sh"')
             self._msg('Close Active App', out or 'No output')

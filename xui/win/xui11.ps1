@@ -46,7 +46,7 @@ function Invoke-PythonScript($py,$code){
 
 function Install-Dependencies($py){
     if(-not $YesInstall){ Write-Info "Omitiendo instalación de dependencias (use --yes-install)"; return }
-    try { & $py -m pip install --user PyQt5 Pillow | Out-Null }
+    try { & $py -m pip install PyQt5 PyQtWebEngine Pillow | Out-Null }
     catch { Write-Warn "pip falló: $($_.Exception.Message)" }
 }
 
