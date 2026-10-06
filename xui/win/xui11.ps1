@@ -220,12 +220,12 @@ function Fetch-RepoMeta(){
 }
 
 function Get-Status(){
-    `$state = Read-State()
-    `$meta = $null
-    try { `$meta = Fetch-RepoMeta() } catch { `$meta = $null }
+    `$state = Read-State
+    `$meta = `$null
+    try { `$meta = Fetch-RepoMeta } catch { `$meta = `$null }
     `$local = ""; if(`$state){ `$local = [string]`$state.installed_commit }
-    `$checked = ($meta -ne $null)
-    `$required = $true
+    `$checked = (`$meta -ne `$null)
+    `$required = `$true
     `$reason = "missing-local-version"
     `$branch = "main"; `$remote_commit = ""; `$remote_date = ""; `$remote_url = ""
     if(`$meta){
@@ -233,17 +233,17 @@ function Get-Status(){
         `$remote_commit = [string]`$meta.remote_commit
         `$remote_date = [string]`$meta.remote_date
         `$remote_url = [string]`$meta.remote_url
-        if(-not `$remote_commit){ `$required = $true; `$reason = "missing-remote-sha" }
-        elseif(-not `$local){ `$required = $true; `$reason = "missing-local-version" }
-        elseif(`$local -ne `$remote_commit){ `$required = $true; `$reason = "outdated" }
-        else { `$required = $false; `$reason = "up-to-date" }
+        if(-not `$remote_commit){ `$required = `$true; `$reason = "missing-remote-sha" }
+        elseif(-not `$local){ `$required = `$true; `$reason = "missing-local-version" }
+        elseif(`$local -ne `$remote_commit){ `$required = `$true; `$reason = "outdated" }
+        else { `$required = `$false; `$reason = "up-to-date" }
     } else {
-        `$required = $false
+        `$required = `$false
         `$reason = "remote-unavailable"
     }
     [pscustomobject]@{
         checked = `$checked
-        mandatory = $true
+        mandatory = `$true
         update_required = `$required
         reason = `$reason
         repo = `$repo
@@ -258,7 +258,7 @@ function Get-Status(){
 function Ensure-Git(){
     `$g = Get-Command git -ErrorAction SilentlyContinue
     if(`$g){ return `$g.Path }
-    return $null
+    return `$null
 }
 
 function Download-Zip(`$url,`$destZip,`$destDir){
@@ -271,15 +271,15 @@ function Download-Zip(`$url,`$destZip,`$destDir){
 }
 
 function Apply-Update(){
-    `$meta = Fetch-RepoMeta()
+    `$meta = Fetch-RepoMeta
     if(-not `$meta){ throw "No remote metadata" }
     `$branch = `$meta.branch; if(-not `$branch){ `$branch = "main" }
     `$remote_commit = `$meta.remote_commit
     `$tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("xui_update_" + [System.Guid]::NewGuid().ToString())
-    `$tmpZip = "$tmp.zip"
-    `$git = Ensure-Git()
+    `$tmpZip = "`$tmp.zip"
+    `$git = Ensure-Git
     if(-not (Test-Path `$srcDir)){ New-Item -ItemType Directory -Path `$srcDir -Force | Out-Null }
-    if($git){
+    if(`$git){
         if(-not (Test-Path (Join-Path `$srcDir ".git"))){
             git clone "https://github.com/`$repo.git" `$srcDir
         } else {
@@ -302,18 +302,20 @@ function Apply-Update(){
     Write-State `$remote_commit `$branch `$meta.remote_date `$srcDir
 }
 
-switch($Mode){
+switch(`$Mode){
     "mandatory" {
-        `$s = Get-Status()
+        `$s = Get-Status
         if(`$Json){ `$s | ConvertTo-Json -Depth 4; exit 0 }
         if(`$s.update_required){ Write-Host "Update required"; exit 10 }
         Write-Host "Up to date"; exit 0
     }
     "apply" {
-        try { Apply-Update(); if(`$Json){ @{status="ok"}|ConvertTo-Json }; exit 0 } catch { Write-Host $_.Exception.Message; exit 1 }
+        try { Apply-Update; if(`$Json){ @{status="ok"}|ConvertTo-Json }; exit 0 } catch { Write-Host `$_.Exception.Message; exit 1 }
     }
     default {
-        `$s = Get-Status(); if(`$Json){ `$s | ConvertTo-Json -Depth 4 } else { `$s } | Out-Host; if(`$s.update_required){ exit 10 } else { exit 0 }
+        `$s = Get-Status
+        if(`$Json){ `$s | ConvertTo-Json -Depth 4 } else { `$s | Out-Host }
+        if(`$s.update_required){ exit 10 } else { exit 0 }
     }
 }
 "@

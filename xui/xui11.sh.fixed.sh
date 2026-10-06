@@ -9265,6 +9265,345 @@ class NotificationCenterDialog(QtWidgets.QDialog):
         super().keyPressEvent(event)
 
 
+class AvatarPreview(QtWidgets.QWidget):
+    def __init__(self, avatar=None, parent=None):
+        super().__init__(parent)
+        self.avatar = dict(avatar) if isinstance(avatar, dict) else {}
+        self._rotation = 0.0
+        self.setMinimumSize(110, 150)
+        self._timer = QtCore.QTimer(self)
+        self._timer.timeout.connect(self._tick)
+        self._timer.start(40)
+
+    def set_avatar(self, avatar):
+        self.avatar = dict(avatar) if isinstance(avatar, dict) else {}
+        self.update()
+
+    def _tick(self):
+        self._rotation = (self._rotation + 0.035) % (math.pi * 2)
+        self.update()
+
+    def paintEvent(self, event):
+        painter = QtGui.QPainter(self)
+        painter.setRenderHint(QtGui.QPainter.Antialiasing)
+        bounds = self.rect()
+        if bounds.width() < 70:
+            center = QtCore.QPointF(bounds.center())
+            skin = QtGui.QColor(str(self.avatar.get('skin') or '#c98762'))
+            hair = QtGui.QColor(str(self.avatar.get('hair') or '#202329'))
+            outfit = QtGui.QColor(str(self.avatar.get('outfit') or '#45a65a'))
+            painter.setPen(QtGui.QPen(QtGui.QColor('#75d968'), 1.5))
+            painter.setBrush(QtGui.QColor('#10261a'))
+            painter.drawEllipse(bounds.adjusted(1, 1, -1, -1))
+            painter.setPen(QtCore.Qt.NoPen)
+            painter.setBrush(outfit)
+            painter.drawRoundedRect(QtCore.QRectF(center.x() - 10, center.y() + 4, 20, 14), 8, 8)
+            painter.setBrush(skin)
+            painter.drawEllipse(QtCore.QRectF(center.x() - 7, center.y() - 11, 14, 17))
+            painter.setBrush(hair)
+            painter.drawChord(QtCore.QRectF(center.x() - 7, center.y() - 12, 14, 12), 0, 180 * 16)
+            painter.end()
+            return
+        painter.fillRect(bounds, QtGui.QColor('#0c1712'))
+        background = QtGui.QLinearGradient(0, 0, bounds.width(), bounds.height())
+        background.setColorAt(0, QtGui.QColor('#163626'))
+        background.setColorAt(1, QtGui.QColor('#09100d'))
+        painter.fillRect(bounds, background)
+        center_x = bounds.width() * 0.5
+        ground_y = bounds.height() * 0.83
+        painter.setPen(QtGui.QPen(QtGui.QColor(95, 203, 113, 110), 1.5))
+        painter.setBrush(QtCore.Qt.NoBrush)
+        painter.drawEllipse(QtCore.QRectF(center_x - bounds.width() * 0.34, ground_y - 13, bounds.width() * 0.68, 26))
+
+        scale = max(0.24, abs(math.cos(self._rotation)))
+        facing_front = math.cos(self._rotation) >= 0
+        skin = QtGui.QColor(str(self.avatar.get('skin') or '#c98762'))
+        hair = QtGui.QColor(str(self.avatar.get('hair') or '#202329'))
+        outfit = QtGui.QColor(str(self.avatar.get('outfit') or '#45a65a'))
+        accessory = str(self.avatar.get('accessory') or 'None')
+        cx = center_x
+        head_y = bounds.height() * 0.25
+        head_w = min(bounds.width() * 0.28, bounds.height() * 0.21) * scale
+        head_h = min(bounds.height() * 0.19, bounds.width() * 0.24)
+        torso_w = min(bounds.width() * 0.42, bounds.height() * 0.31) * max(0.38, scale)
+        torso_h = bounds.height() * 0.31
+        leg_w = max(7, torso_w * 0.31)
+
+        painter.setPen(QtCore.Qt.NoPen)
+        painter.setBrush(QtGui.QColor(0, 0, 0, 90))
+        painter.drawEllipse(QtCore.QRectF(cx - torso_w * 0.8, ground_y - 4, torso_w * 1.6, 13))
+        painter.setBrush(outfit.darker(145))
+        painter.drawRoundedRect(QtCore.QRectF(cx - torso_w * 0.55, head_y + head_h + torso_h - 4, leg_w, bounds.height() * 0.22), 5, 5)
+        painter.drawRoundedRect(QtCore.QRectF(cx + torso_w * 0.24, head_y + head_h + torso_h - 4, leg_w, bounds.height() * 0.22), 5, 5)
+        painter.setBrush(QtGui.QColor('#111914'))
+        painter.drawRoundedRect(QtCore.QRectF(cx - torso_w * 0.63, ground_y - 9, leg_w * 1.25, 10), 4, 4)
+        painter.drawRoundedRect(QtCore.QRectF(cx + torso_w * 0.12, ground_y - 9, leg_w * 1.25, 10), 4, 4)
+
+        body = QtGui.QLinearGradient(cx - torso_w * 0.6, 0, cx + torso_w * 0.6, 0)
+        body.setColorAt(0, outfit.darker(160))
+        body.setColorAt(0.48, outfit.lighter(118))
+        body.setColorAt(1, outfit.darker(135))
+        painter.setBrush(body)
+        painter.drawRoundedRect(QtCore.QRectF(cx - torso_w * 0.58, head_y + head_h + 3, torso_w * 1.16, torso_h), torso_w * 0.22, torso_w * 0.22)
+        painter.setBrush(skin.darker(125))
+        painter.drawRoundedRect(QtCore.QRectF(cx - torso_w * 0.82, head_y + head_h + 12, torso_w * 0.25, torso_h * 0.83), 8, 8)
+        painter.drawRoundedRect(QtCore.QRectF(cx + torso_w * 0.57, head_y + head_h + 12, torso_w * 0.25, torso_h * 0.83), 8, 8)
+        painter.setBrush(skin)
+        painter.drawRoundedRect(QtCore.QRectF(cx - torso_w * 0.12, head_y + head_h - 1, torso_w * 0.24, torso_h * 0.22), 5, 5)
+        painter.setBrush(QtGui.QColor(skin).lighter(116))
+        painter.drawEllipse(QtCore.QRectF(cx - head_w / 2, head_y, head_w, head_h))
+        painter.setBrush(hair)
+        painter.drawChord(QtCore.QRectF(cx - head_w / 2 - 1, head_y - 1, head_w + 2, head_h * 0.72), 0, 180 * 16)
+        if facing_front and scale > 0.62:
+            painter.setPen(QtGui.QPen(QtGui.QColor('#25221f'), max(1.3, head_w * 0.055)))
+            eye_y = head_y + head_h * 0.49
+            eye_dx = head_w * 0.2
+            painter.drawPoint(QtCore.QPointF(cx - eye_dx, eye_y))
+            painter.drawPoint(QtCore.QPointF(cx + eye_dx, eye_y))
+            painter.setPen(QtGui.QPen(QtGui.QColor('#8e5146'), 1.5))
+            painter.drawArc(QtCore.QRectF(cx - head_w * 0.13, head_y + head_h * 0.56, head_w * 0.26, head_h * 0.22), 200 * 16, 140 * 16)
+        if accessory.lower() not in ('', 'none'):
+            painter.setPen(QtGui.QPen(QtGui.QColor('#b7f7e2'), 2))
+            painter.setBrush(QtGui.QColor(54, 219, 182, 70))
+            painter.drawRoundedRect(QtCore.QRectF(cx - head_w * 0.49, head_y + head_h * 0.36, head_w * 0.98, head_h * 0.2), 5, 5)
+        painter.end()
+
+
+class AvatarStudioDialog(QtWidgets.QDialog):
+    COSMETICS = [
+        {'id': 'metro_jacket', 'name': 'Metro jacket', 'field': 'outfit', 'value': '#397daf', 'price': 35},
+        {'id': 'solar_armor', 'name': 'Solar armor', 'field': 'outfit', 'value': '#bc7335', 'price': 55},
+        {'id': 'neon_visor', 'name': 'Neon visor', 'field': 'accessory', 'value': 'Neon visor', 'price': 25},
+        {'id': 'holo_visor', 'name': 'Holo visor', 'field': 'accessory', 'value': 'Holo visor', 'price': 40},
+        {'id': 'crown', 'name': 'Champion crown', 'field': 'accessory', 'value': 'Champion crown', 'price': 60},
+    ]
+    SKIN_CHOICES = [('Warm', '#c98762'), ('Light', '#efc7a4'), ('Deep', '#754b3b'), ('Olive', '#ad805d')]
+    HAIR_CHOICES = [('Midnight', '#202329'), ('Silver', '#bfc8ca'), ('Copper', '#a74e2e'), ('Blue', '#286d9c'), ('Violet', '#72529b')]
+    OUTFIT_CHOICES = [('Xbox green', '#45a65a'), ('Ocean blue', '#2679a8'), ('Crimson', '#a9444a')]
+
+    def __init__(self, parent=None, store_mode=False):
+        super().__init__(parent)
+        self.setWindowTitle('XUI Avatar Studio')
+        self.setModal(True)
+        self.resize(900, 590)
+        self.profile = safe_json_read(PROFILE_FILE, {})
+        if not isinstance(self.profile, dict):
+            self.profile = {}
+        saved = self.profile.get('avatar_creator')
+        self.avatar = dict(saved) if isinstance(saved, dict) else {}
+        self.avatar.setdefault('skin', self.SKIN_CHOICES[0][1])
+        self.avatar.setdefault('hair', self.HAIR_CHOICES[0][1])
+        self.avatar.setdefault('outfit', self.OUTFIT_CHOICES[0][1])
+        self.avatar.setdefault('accessory', 'None')
+        self.avatar.setdefault('owned', [])
+        self._store_mode = bool(store_mode)
+        self._build()
+        self._sync_controls()
+        self._show_mode(self._store_mode)
+
+    def _build(self):
+        self.setStyleSheet('''
+            QDialog { background:#0d1712; color:#f2f7f3; }
+            QLabel#studio_title { color:#f4faf5; font-size:24px; font-weight:800; }
+            QLabel#studio_muted { color:#a9bbb0; font-size:13px; }
+            QFrame#avatar_preview_frame, QFrame#studio_controls { background:#14231a; border:1px solid #31523c; border-radius:6px; }
+            QPushButton { background:#1b3022; color:#eaf3ec; border:1px solid #42694a; padding:8px 12px; border-radius:4px; }
+            QPushButton:checked, QPushButton#studio_primary { background:#4aa83d; color:white; border-color:#72ce60; font-weight:700; }
+            QComboBox, QLineEdit, QListWidget { background:#0b140f; color:#f3f7f4; border:1px solid #3a5943; padding:7px; }
+            QListWidget::item { padding:10px; border-bottom:1px solid #263c2d; }
+            QListWidget::item:selected { background:#245634; }
+        ''')
+        root = QtWidgets.QVBoxLayout(self)
+        root.setContentsMargins(18, 16, 18, 16)
+        root.setSpacing(12)
+        title = QtWidgets.QLabel('AVATAR STUDIO')
+        title.setObjectName('studio_title')
+        subtitle = QtWidgets.QLabel('Create a look, preview it in 3D, and equip your profile.')
+        subtitle.setObjectName('studio_muted')
+        root.addWidget(title)
+        root.addWidget(subtitle)
+        body = QtWidgets.QHBoxLayout()
+        body.setSpacing(14)
+        preview_frame = QtWidgets.QFrame()
+        preview_frame.setObjectName('avatar_preview_frame')
+        preview_layout = QtWidgets.QVBoxLayout(preview_frame)
+        preview_layout.setContentsMargins(8, 8, 8, 8)
+        self.preview = AvatarPreview(self.avatar)
+        preview_layout.addWidget(self.preview, 1)
+        self.name_input = QtWidgets.QLineEdit(str(self.profile.get('avatar') or 'My Avatar'))
+        self.name_input.setMaxLength(32)
+        self.name_input.setPlaceholderText('Avatar name')
+        preview_layout.addWidget(self.name_input)
+        body.addWidget(preview_frame, 4)
+
+        controls = QtWidgets.QFrame()
+        controls.setObjectName('studio_controls')
+        controls_layout = QtWidgets.QVBoxLayout(controls)
+        controls_layout.setContentsMargins(14, 14, 14, 14)
+        controls_layout.setSpacing(10)
+        tabs = QtWidgets.QHBoxLayout()
+        self.creator_tab = QtWidgets.QPushButton('Creator')
+        self.creator_tab.setCheckable(True)
+        self.store_tab = QtWidgets.QPushButton('Store')
+        self.store_tab.setCheckable(True)
+        self.creator_tab.clicked.connect(lambda: self._show_mode(False))
+        self.store_tab.clicked.connect(lambda: self._show_mode(True))
+        tabs.addWidget(self.creator_tab)
+        tabs.addWidget(self.store_tab)
+        controls_layout.addLayout(tabs)
+        self.pages = QtWidgets.QStackedWidget()
+        controls_layout.addWidget(self.pages, 1)
+        self.creator_page = QtWidgets.QWidget()
+        form = QtWidgets.QFormLayout(self.creator_page)
+        form.setContentsMargins(2, 8, 2, 8)
+        form.setSpacing(13)
+        self.skin_combo = self._add_combo(form, 'Skin tone', self.SKIN_CHOICES)
+        self.hair_combo = self._add_combo(form, 'Hair color', self.HAIR_CHOICES)
+        self.outfit_combo = self._add_combo(form, 'Outfit', self.OUTFIT_CHOICES)
+        self.accessory_combo = QtWidgets.QComboBox()
+        form.addRow('Accessory', self.accessory_combo)
+        self.skin_combo.currentIndexChanged.connect(lambda: self._select_field('skin', self.skin_combo))
+        self.hair_combo.currentIndexChanged.connect(lambda: self._select_field('hair', self.hair_combo))
+        self.outfit_combo.currentIndexChanged.connect(lambda: self._select_field('outfit', self.outfit_combo))
+        self.accessory_combo.currentIndexChanged.connect(lambda: self._select_field('accessory', self.accessory_combo))
+        self.pages.addWidget(self.creator_page)
+
+        self.store_page = QtWidgets.QWidget()
+        store_layout = QtWidgets.QVBoxLayout(self.store_page)
+        store_layout.setContentsMargins(2, 8, 2, 8)
+        self.balance_label = QtWidgets.QLabel()
+        self.balance_label.setObjectName('studio_muted')
+        self.cosmetic_list = QtWidgets.QListWidget()
+        for item in self.COSMETICS:
+            owned = item['id'] in self._owned_ids()
+            suffix = '  /  OWNED' if owned else f"  /  {item['price']} credits"
+            entry = QtWidgets.QListWidgetItem(item['name'] + suffix)
+            entry.setData(QtCore.Qt.UserRole, item['id'])
+            self.cosmetic_list.addItem(entry)
+        self.cosmetic_list.setCurrentRow(0)
+        self.buy_button = QtWidgets.QPushButton('Buy and equip')
+        self.buy_button.setObjectName('studio_primary')
+        self.buy_button.clicked.connect(self._buy_or_equip)
+        store_layout.addWidget(self.balance_label)
+        store_layout.addWidget(self.cosmetic_list, 1)
+        store_layout.addWidget(self.buy_button)
+        self.cosmetic_list.currentRowChanged.connect(self._update_buy_button)
+        self.pages.addWidget(self.store_page)
+        body.addWidget(controls, 6)
+        root.addLayout(body, 1)
+
+        footer = QtWidgets.QHBoxLayout()
+        footer.addStretch(1)
+        self.save_button = QtWidgets.QPushButton('Save to profile')
+        self.save_button.setObjectName('studio_primary')
+        self.save_button.clicked.connect(self._save_avatar)
+        close_button = QtWidgets.QPushButton('Close')
+        close_button.clicked.connect(self.reject)
+        footer.addWidget(self.save_button)
+        footer.addWidget(close_button)
+        root.addLayout(footer)
+
+    def _add_combo(self, form, label, choices):
+        combo = QtWidgets.QComboBox()
+        for name, value in choices:
+            combo.addItem(name, value)
+        form.addRow(label, combo)
+        return combo
+
+    def _owned_ids(self):
+        owned = self.avatar.get('owned', [])
+        return {str(value) for value in owned} if isinstance(owned, list) else set()
+
+    def _sync_controls(self):
+        combos = (self.skin_combo, self.hair_combo, self.outfit_combo, self.accessory_combo)
+        for combo in combos:
+            combo.blockSignals(True)
+        self.outfit_combo.clear()
+        for name, value in self.OUTFIT_CHOICES:
+            self.outfit_combo.addItem(name, value)
+        self.accessory_combo.clear()
+        self.accessory_combo.addItem('None', 'None')
+        for item in self.COSMETICS:
+            if item['id'] not in self._owned_ids():
+                continue
+            combo = self.outfit_combo if item['field'] == 'outfit' else self.accessory_combo
+            combo.addItem(item['name'], item['value'])
+        for key, combo in (('skin', self.skin_combo), ('hair', self.hair_combo), ('outfit', self.outfit_combo), ('accessory', self.accessory_combo)):
+            index = combo.findData(self.avatar.get(key))
+            combo.setCurrentIndex(max(0, index))
+        for combo in combos:
+            combo.blockSignals(False)
+        self._update_preview()
+        self._update_buy_button()
+        balance = safe_json_read(DATA_HOME / 'saldo.json', {'balance': 250, 'currency': 'credits'})
+        if not isinstance(balance, dict):
+            balance = {'balance': 250, 'currency': 'credits'}
+        self.balance_label.setText(f"Wallet: {float(balance.get('balance', 250) or 0):.0f} {balance.get('currency') or 'credits'}")
+
+    def _select_field(self, key, combo):
+        value = combo.currentData()
+        if value is not None:
+            self.avatar[key] = value
+            self._update_preview()
+
+    def _update_preview(self):
+        self.preview.set_avatar(self.avatar)
+
+    def _show_mode(self, store_mode):
+        self._store_mode = bool(store_mode)
+        self.pages.setCurrentWidget(self.store_page if self._store_mode else self.creator_page)
+        self.creator_tab.setChecked(not self._store_mode)
+        self.store_tab.setChecked(self._store_mode)
+
+    def _update_buy_button(self, *_args):
+        item = self._selected_cosmetic()
+        if item:
+            owned = item['id'] in self._owned_ids()
+            self.buy_button.setText('Equip item' if owned else f"Buy and equip  /  {item['price']} credits")
+
+    def _selected_cosmetic(self):
+        current = self.cosmetic_list.currentItem()
+        if current is None:
+            return None
+        return next((item for item in self.COSMETICS if item['id'] == current.data(QtCore.Qt.UserRole)), None)
+
+    def _buy_or_equip(self):
+        item = self._selected_cosmetic()
+        if item is None:
+            return
+        owned = self._owned_ids()
+        if item['id'] not in owned:
+            wallet_path = DATA_HOME / 'saldo.json'
+            wallet = safe_json_read(wallet_path, {'balance': 250, 'currency': 'credits'})
+            if not isinstance(wallet, dict):
+                wallet = {'balance': 250, 'currency': 'credits'}
+            try:
+                balance = float(wallet.get('balance', 250) or 0)
+            except (TypeError, ValueError):
+                balance = 0
+            if balance < item['price']:
+                QtWidgets.QMessageBox.information(self, 'Avatar Store', 'Not enough credits for this item.')
+                return
+            wallet['balance'] = balance - item['price']
+            safe_json_write(wallet_path, wallet)
+            owned.add(item['id'])
+            self.avatar['owned'] = sorted(owned)
+        self.avatar[item['field']] = item['value']
+        self._sync_controls()
+        self._save_profile_data()
+        self._show_mode(False)
+
+    def _save_profile_data(self):
+        self.profile['avatar'] = ''.join(ch for ch in self.name_input.text().strip() if ch.isprintable())[:32] or 'My Avatar'
+        self.profile['avatar_creator'] = dict(self.avatar)
+        self.profile['updated_at'] = int(time.time())
+        safe_json_write(PROFILE_FILE, self.profile)
+
+    def _save_avatar(self):
+        self._save_profile_data()
+        self.accept()
+
+
 class Dashboard(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
@@ -9693,10 +10032,12 @@ class Dashboard(QtWidgets.QMainWindow):
         profile_l = QtWidgets.QHBoxLayout(profile_card)
         profile_l.setContentsMargins(7, 6, 12, 6)
         profile_l.setSpacing(9)
-        profile_avatar = QtWidgets.QLabel(profile_name[:1].upper())
+        profile_data = safe_json_read(PROFILE_FILE, {})
+        avatar_data = profile_data.get('avatar_creator', {}) if isinstance(profile_data, dict) else {}
+        profile_avatar = AvatarPreview(avatar_data, profile_card)
         profile_avatar.setObjectName('profile_avatar')
-        profile_avatar.setAlignment(QtCore.Qt.AlignCenter)
         profile_avatar.setFixedSize(38, 38)
+        self.profile_avatar_view = profile_avatar
         profile_copy = QtWidgets.QVBoxLayout()
         profile_copy.setContentsMargins(0, 0, 0, 0)
         profile_copy.setSpacing(1)
@@ -9726,6 +10067,7 @@ class Dashboard(QtWidgets.QMainWindow):
         stage_l.addWidget(self.top_tabs)
 
         self.page_stack = QtWidgets.QStackedWidget()
+        self.page_stack.setObjectName('dashboard_page_stack')
         sl = self.page_stack.layout()
         if isinstance(sl, QtWidgets.QStackedLayout):
             # Keep only the selected dashboard page visible; transitions use a temporary snapshot overlay.
@@ -9767,6 +10109,10 @@ class Dashboard(QtWidgets.QMainWindow):
                 border:1px solid {stage_border};
                 border-radius:0px;
             }}
+            QStackedWidget#dashboard_page_stack {{
+                background:{main_bg};
+                border:none;
+            }}
             QFrame#masthead {{
                 background:transparent;
                 border-bottom:1px solid rgba(197,222,207,0.16);
@@ -9789,7 +10135,7 @@ class Dashboard(QtWidgets.QMainWindow):
                 background:rgba(255,255,255,0.045);
                 border:1px solid rgba(220,239,227,0.14);
             }}
-            QLabel#profile_avatar {{
+            QWidget#profile_avatar {{
                 background:qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #23a629, stop:1 #0d5e20);
                 color:#ffffff;
                 border:1px solid rgba(197,255,180,0.7);
@@ -10462,7 +10808,11 @@ class Dashboard(QtWidgets.QMainWindow):
     def _update_checker_path(self):
         xui_bin = XUI_HOME / 'bin'
         if self._is_windows_runtime():
-            order = [xui_bin / 'xui_update_check.py', xui_bin / 'xui_update_check.sh']
+            order = [
+                xui_bin / 'xui_update_check.ps1',
+                xui_bin / 'xui_update_check.py',
+                xui_bin / 'xui_update_check.sh',
+            ]
         else:
             order = [xui_bin / 'xui_update_check.sh', xui_bin / 'xui_update_check.py']
         for p in order:
@@ -10486,6 +10836,14 @@ class Dashboard(QtWidgets.QMainWindow):
             if json_mode:
                 args.append('--json')
             return pyexe, args
+        if checker.suffix.lower() == '.ps1' and self._is_windows_runtime():
+            powershell = shutil.which('pwsh') or shutil.which('powershell')
+            if not powershell:
+                return None
+            args = ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', str(checker), '-Mode', mode]
+            if json_mode:
+                args.append('-Json')
+            return powershell, args
         checker_q = shlex.quote(str(checker))
         cmd = f'{checker_q} {mode}'
         if json_mode:
@@ -11344,6 +11702,16 @@ exit 1
         u = str(url or '').strip()
         if not u:
             return
+        if self._is_windows_runtime():
+            qurl = QtCore.QUrl(u)
+            if QtGui.QDesktopServices.openUrl(qurl):
+                return
+            try:
+                os.startfile(u)
+                return
+            except Exception as exc:
+                self._msg('Open link', f'Could not open the link: {exc}')
+                return
         kiosk = XUI_HOME / 'bin' / 'xui_browser.sh'
         if kiosk.exists():
             # Keep browser apps useful but always fullscreen by default.
@@ -11352,6 +11720,15 @@ exit 1
             self._run('/bin/sh', ['-c', f'"{kiosk}" {mode} "{u}"'])
             return
         self._run('/bin/sh', ['-c', f'xdg-open "{u}"'])
+
+    def _open_avatar_studio(self, store_mode=False):
+        self._play_sfx('open')
+        dialog = AvatarStudioDialog(self, store_mode=store_mode)
+        dialog.exec_()
+        profile_data = safe_json_read(PROFILE_FILE, {})
+        if isinstance(profile_data, dict):
+            self.profile_avatar_view.set_avatar(profile_data.get('avatar_creator', {}))
+        self._play_sfx('close')
 
     def _open_social_chat(self, initial_mode='messages'):
         self._play_sfx('open')
@@ -12437,7 +12814,9 @@ exit 1
                 'Use only game dumps you are legally entitled to use. Official guide: '
                 'https://github.com/xenia-canary/xenia-canary/wiki/Quickstart#how-to-rip-games',
             )
-        elif action in ('Store', 'Avatar Store'):
+        elif action == 'Avatar Store':
+            self._open_avatar_studio(store_mode=True)
+        elif action == 'Store':
             store_launcher = XUI_HOME / 'bin' / 'xui_store.sh'
             if store_launcher.is_file():
                 self._run('/bin/sh', [str(store_launcher)])
@@ -12655,7 +13034,7 @@ exit 1
         elif action in ('Browser Hub',):
             self._menu('Browser Hub', ['Web Browser', 'Bing Search', 'YouTube', 'Twitch', 'Netflix'])
         elif action == 'Avatar Editor':
-            self._menu('Avatar Editor', ['Avatar Store', 'Gamer Card', 'Sign In'])
+            self._open_avatar_studio()
         elif action == 'Controller Center':
             self._menu('Controller Center', ['Gamepad Test', 'Controller Probe', 'Controller Mappings', 'Controller Profile', 'Controller L4T Fix'])
         elif action == 'Web Control':
