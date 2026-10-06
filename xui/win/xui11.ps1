@@ -62,8 +62,8 @@ function Copy-Assets(){
             Copy-Item $_.FullName $dest -Force
         }
     }
-    $appLogo = Join-Path $AssetsDir "bootlogo.png"
-    if(-not (Test-Path $appLogo)){ $appLogo = Join-Path $AssetsDir "applogo.png" }
+    $appLogo = Join-Path $AssetsDir "applogo.png"
+    if(-not (Test-Path $appLogo)){ $appLogo = Join-Path $AssetsDir "bootlogo.png" }
     if(Test-Path $appLogo){ Copy-Item $appLogo (Join-Path $AssetsDir "logo.png") -Force }
 }
 

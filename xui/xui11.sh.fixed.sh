@@ -2042,6 +2042,10 @@ import urllib.error
 from pathlib import Path
 from PyQt5 import QtWidgets, QtGui, QtCore
 try:
+    from PyQt5 import QtMultimedia
+except Exception:
+    QtMultimedia = None
+try:
     from PyQt5 import QtWebEngineWidgets
 except Exception:
     QtWebEngineWidgets = None
@@ -9349,8 +9353,9 @@ class AvatarPreview(QtWidgets.QWidget):
         painter.setBrush(QtCore.Qt.NoBrush)
         painter.drawEllipse(QtCore.QRectF(center_x - bounds.width() * 0.34, ground_y - 13, bounds.width() * 0.68, 26))
 
-        scale = max(0.24, abs(math.cos(self._rotation)))
-        facing_front = math.cos(self._rotation) >= 0
+        turn = math.cos(self._rotation)
+        scale = 0.9 + 0.1 * abs(turn)
+        facing_front = turn > -0.15
         skin = QtGui.QColor(str(self.avatar.get('skin') or '#c98762'))
         hair = QtGui.QColor(str(self.avatar.get('hair') or '#202329'))
         outfit = QtGui.QColor(str(self.avatar.get('outfit') or '#45a65a'))
@@ -9396,11 +9401,125 @@ class AvatarPreview(QtWidgets.QWidget):
             painter.drawPoint(QtCore.QPointF(cx + eye_dx, eye_y))
             painter.setPen(QtGui.QPen(QtGui.QColor('#8e5146'), 1.5))
             painter.drawArc(QtCore.QRectF(cx - head_w * 0.13, head_y + head_h * 0.56, head_w * 0.26, head_h * 0.22), 200 * 16, 140 * 16)
-        if accessory.lower() not in ('', 'none'):
+        accessory_key = accessory.lower()
+        if 'visor' in accessory_key:
             painter.setPen(QtGui.QPen(QtGui.QColor('#b7f7e2'), 2))
-            painter.setBrush(QtGui.QColor(54, 219, 182, 70))
-            painter.drawRoundedRect(QtCore.QRectF(cx - head_w * 0.49, head_y + head_h * 0.36, head_w * 0.98, head_h * 0.2), 5, 5)
+            painter.setBrush(QtGui.QColor(54, 219, 182, 100))
+            painter.drawRoundedRect(QtCore.QRectF(cx - head_w * 0.49, head_y + head_h * 0.37, head_w * 0.98, head_h * 0.2), 5, 5)
+        elif 'crown' in accessory_key:
+            crown_y = head_y - head_h * 0.12
+            crown_rect = QtCore.QRectF(cx - head_w * 0.42, crown_y, head_w * 0.84, head_h * 0.26)
+            painter.setPen(QtGui.QPen(QtGui.QColor('#ffe08a'), 1.5))
+            painter.setBrush(QtGui.QColor('#d8a83e'))
+            painter.drawRect(crown_rect)
+            crown = QtGui.QPolygonF([
+                QtCore.QPointF(crown_rect.left(), crown_rect.top() + 2),
+                QtCore.QPointF(crown_rect.left() + crown_rect.width() * 0.12, crown_rect.top() - head_h * 0.28),
+                QtCore.QPointF(crown_rect.left() + crown_rect.width() * 0.36, crown_rect.top() + 1),
+                QtCore.QPointF(cx, crown_rect.top() - head_h * 0.36),
+                QtCore.QPointF(crown_rect.left() + crown_rect.width() * 0.66, crown_rect.top() + 1),
+                QtCore.QPointF(crown_rect.right() - crown_rect.width() * 0.12, crown_rect.top() - head_h * 0.28),
+                QtCore.QPointF(crown_rect.right(), crown_rect.top() + 2),
+            ])
+            painter.drawPolygon(crown)
         painter.end()
+
+
+class Avatar3DPreview(QtWidgets.QWidget):
+    def __init__(self, avatar=None, parent=None):
+        super().__init__(parent)
+        self.avatar = dict(avatar) if isinstance(avatar, dict) else {}
+        self.pages = QtWidgets.QStackedWidget(self)
+        self.fallback = AvatarPreview(self.avatar, self.pages)
+        self.pages.addWidget(self.fallback)
+        self.view = None
+        self._attempts = 0
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.pages)
+        if QtWebEngineWidgets is None:
+            return
+        try:
+            self.view = QtWebEngineWidgets.QWebEngineView(self.pages)
+            self.pages.addWidget(self.view)
+            self.view.loadFinished.connect(self._poll_scene)
+            self.view.setHtml(self._html(), QtCore.QUrl('https://xui-avatar.local/'))
+            self._poll_timer = QtCore.QTimer(self)
+            self._poll_timer.setInterval(250)
+            self._poll_timer.timeout.connect(self._check_ready)
+            self._poll_timer.start()
+            QtCore.QTimer.singleShot(9000, self._use_fallback)
+        except Exception:
+            self.view = None
+
+    @staticmethod
+    def _html():
+        return '''<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>html,body,#s{margin:0;width:100%;height:100%;overflow:hidden;background:#0c1712}#s{background:radial-gradient(ellipse at 50% 38%,#1b3a29,#102319 54%,#09120d)}canvas{display:block}#tag{position:absolute;bottom:12px;left:16px;color:#9fc2a7;font:11px Segoe UI,Arial;letter-spacing:1px}#fallback{display:none;position:absolute;inset:0;color:#cbdace;text-align:center;padding-top:45%;font:14px Segoe UI,Arial}</style></head>
+<body><div id="s"></div><div id="tag">XUI AVATAR / 3D PREVIEW</div><div id="fallback">3D preview is unavailable</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r152/three.min.js"></script><script>
+(()=>{const host=document.getElementById('s');if(!window.THREE){document.getElementById('fallback').style.display='block';return;}
+const T=THREE, scene=new T.Scene(), camera=new T.PerspectiveCamera(32,1,.1,60);camera.position.set(4,2.8,7);camera.lookAt(0,1.65,0);
+const renderer=new T.WebGLRenderer({antialias:true,alpha:true});renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.6));renderer.shadowMap.enabled=true;renderer.shadowMap.type=T.PCFSoftShadowMap;renderer.outputColorSpace=T.SRGBColorSpace;host.appendChild(renderer.domElement);
+scene.add(new T.HemisphereLight(0xeaffef,0x15261b,2));const key=new T.DirectionalLight(0xffe8c5,3);key.position.set(-3,7,5);key.castShadow=true;scene.add(key);const rim=new T.PointLight(0x38d9a1,18,9);rim.position.set(3,3,-2);scene.add(rim);
+const floor=new T.Mesh(new T.CircleGeometry(3.5,48),new T.MeshStandardMaterial({color:0x102219,roughness:.9}));floor.rotation.x=-Math.PI/2;floor.position.y=-.02;floor.receiveShadow=true;scene.add(floor);
+const ring=new T.Mesh(new T.TorusGeometry(1.18,.018,8,72),new T.MeshBasicMaterial({color:0x53d478,transparent:true,opacity:.75}));ring.rotation.x=Math.PI/2;ring.position.y=.015;scene.add(ring);
+const root=new T.Group();scene.add(root);const model=new T.Group();root.add(model);
+const material=(c,r=.55,m=.03)=>new T.MeshStandardMaterial({color:c,roughness:r,metalness:m});
+function add(g,mat,x,y,z,sx=1,sy=1,sz=1){const o=new T.Mesh(g,mat);o.position.set(x,y,z);o.scale.set(sx,sy,sz);o.castShadow=true;o.receiveShadow=true;model.add(o);return o;}
+function ball(r,mat,x,y,z,sx=1,sy=1,sz=1){return add(new T.SphereGeometry(r,28,20),mat,x,y,z,sx,sy,sz)}
+function cap(r,len,mat,x,y,z,sx=1,sy=1,sz=1){return add(new T.CapsuleGeometry(r,len,8,18),mat,x,y,z,sx,sy,sz)}
+const base={skin:'#c98762',hair:'#202329',outfit:'#45a65a',accessory:'None'};
+window.updateAvatar=(data)=>{Object.assign(base,data||{});for(const o of [...model.children]){model.remove(o);o.geometry.dispose();if(Array.isArray(o.material))o.material.forEach(m=>m.dispose());else o.material.dispose();}
+const skin=material(base.skin),hair=material(base.hair),cloth=material(base.outfit,.38,.08),dark=material('#17252b'),gold=material('#e8c56a',.3,.42),eye=material('#172019',.28),white=material('#f4eee4',.3);
+cap(.12,.18,skin,0,2.42,0);cap(.43,.56,cloth,0,1.8,0,1.06,1.12,.72);
+add(new T.BoxGeometry(.69,.07,.07),gold,0,1.48,.31);ball(.12,gold,0,1.89,.29,.58,.65,.15);
+cap(.105,.64,dark,-.19,.83,0);cap(.105,.64,dark,.19,.83,0);add(new T.BoxGeometry(.26,.12,.42),white,-.19,.33,.1);add(new T.BoxGeometry(.26,.12,.42),white,.19,.33,.1);
+const a=cap(.105,.55,skin,-.53,1.79,0);a.rotation.z=-.12;const b=cap(.105,.55,skin,.53,1.79,0);b.rotation.z=.12;ball(.12,skin,-.54,1.39,0);ball(.12,skin,.54,1.39,0);
+ball(.4,skin,0,2.74,0,.94,1.04,.92);add(new T.SphereGeometry(.415,28,20,0,Math.PI*2,0,Math.PI*.48),hair,0,2.83,-.02,.98,1,.98);
+ball(.043,eye,-.14,2.77,.36,1,1,.4);ball(.043,eye,.14,2.77,.36,1,1,.4);ball(.023,white,-.15,2.79,.39);ball(.023,white,.13,2.79,.39);
+const acc=String(base.accessory||'').toLowerCase();if(acc.includes('visor')){const glass=material(acc.includes('holo')?'#72eee1':'#32cdb0',.16,.35);glass.transparent=true;glass.opacity=.78;add(new T.BoxGeometry(.72,.15,.1),glass,0,2.78,.36);}
+if(acc.includes('crown')){add(new T.CylinderGeometry(.23,.31,.13,5),gold,0,3.22,0);for(let i=0;i<5;i++){const a=i*Math.PI*2/5;add(new T.ConeGeometry(.075,.24,5),gold,Math.cos(a)*.22,3.4,Math.sin(a)*.22);}}
+};window.updateAvatar({});window.xuiAvatarReady=true;
+const resize=()=>{const w=Math.max(1,host.clientWidth),h=Math.max(1,host.clientHeight);renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();};new ResizeObserver(resize).observe(host);resize();const clock=new T.Clock();function frame(){requestAnimationFrame(frame);const t=clock.getElapsedTime();root.rotation.y=Math.sin(t*.42)*.62;model.position.y=Math.sin(t*1.4)*.025;renderer.render(scene,camera);}frame();})();
+</script></body></html>'''
+
+    def set_avatar(self, avatar):
+        self.avatar = dict(avatar) if isinstance(avatar, dict) else {}
+        self.fallback.set_avatar(self.avatar)
+        if self.view is not None:
+            try:
+                payload = json.dumps(self.avatar, ensure_ascii=True)
+                self.view.page().runJavaScript(f'if(window.updateAvatar)window.updateAvatar({payload});')
+            except Exception:
+                pass
+
+    def _poll_scene(self, _ok=False):
+        self._attempts = 0
+        self._check_ready()
+
+    def _check_ready(self):
+        if self.view is None:
+            return
+        self._attempts += 1
+        try:
+            self.view.page().runJavaScript('Boolean(window.xuiAvatarReady)', self._scene_ready)
+        except Exception:
+            self._use_fallback()
+
+    def _scene_ready(self, ready):
+        if ready:
+            self.pages.setCurrentWidget(self.view)
+            self._poll_timer.stop()
+            self.set_avatar(self.avatar)
+        elif self._attempts >= 32:
+            self._use_fallback()
+
+    def _use_fallback(self):
+        if self.view is not None and self.pages.currentWidget() is not self.view:
+            self.pages.setCurrentWidget(self.fallback)
+        if hasattr(self, '_poll_timer'):
+            self._poll_timer.stop()
 
 
 class AvatarStudioDialog(QtWidgets.QDialog):
@@ -9415,11 +9534,21 @@ class AvatarStudioDialog(QtWidgets.QDialog):
     HAIR_CHOICES = [('Midnight', '#202329'), ('Silver', '#bfc8ca'), ('Copper', '#a74e2e'), ('Blue', '#286d9c'), ('Violet', '#72529b')]
     OUTFIT_CHOICES = [('Xbox green', '#45a65a'), ('Ocean blue', '#2679a8'), ('Crimson', '#a9444a')]
 
-    def __init__(self, parent=None, store_mode=False):
+    def __init__(self, parent=None, store_mode=False, sfx_cb=None):
         super().__init__(parent)
-        self.setWindowTitle('XUI Avatar Studio')
+        self.setWindowTitle('Xbox 360 Avatar Editor | XUI')
         self.setModal(True)
-        self.resize(900, 590)
+        self.setWindowFlags(QtCore.Qt.Dialog | QtCore.Qt.FramelessWindowHint)
+        self.setWindowState(QtCore.Qt.WindowFullScreen)
+        self.resize(1280, 720)
+        self._sfx_cb = sfx_cb if callable(sfx_cb) else None
+        self._audio_player = None
+        if QtMultimedia is not None:
+            try:
+                self._audio_player = QtMultimedia.QMediaPlayer(self)
+                self._audio_player.setVolume(45)
+            except Exception:
+                self._audio_player = None
         self.profile = safe_json_read(PROFILE_FILE, {})
         if not isinstance(self.profile, dict):
             self.profile = {}
@@ -9437,24 +9566,42 @@ class AvatarStudioDialog(QtWidgets.QDialog):
 
     def _build(self):
         self.setStyleSheet('''
-            QDialog { background:#0d1712; color:#f2f7f3; }
-            QLabel#studio_title { color:#f4faf5; font-size:24px; font-weight:800; }
+            QDialog { background:#07100b; color:#f2f7f3; }
+            QLabel#studio_title { color:#f4faf5; font-size:27px; font-weight:800; }
             QLabel#studio_muted { color:#a9bbb0; font-size:13px; }
-            QFrame#avatar_preview_frame, QFrame#studio_controls { background:#14231a; border:1px solid #31523c; border-radius:6px; }
-            QPushButton { background:#1b3022; color:#eaf3ec; border:1px solid #42694a; padding:8px 12px; border-radius:4px; }
-            QPushButton:checked, QPushButton#studio_primary { background:#4aa83d; color:white; border-color:#72ce60; font-weight:700; }
-            QComboBox, QLineEdit, QListWidget { background:#0b140f; color:#f3f7f4; border:1px solid #3a5943; padding:7px; }
-            QListWidget::item { padding:10px; border-bottom:1px solid #263c2d; }
-            QListWidget::item:selected { background:#245634; }
+            QLabel#studio_brand { color:#7cdf55; font-size:12px; font-weight:800; }
+            QFrame#studio_header { background:#0d1a12; border-bottom:2px solid #59bb3d; }
+            QFrame#avatar_preview_frame, QFrame#studio_controls { background:rgba(16,31,21,0.96); border:1px solid #31523c; border-radius:3px; }
+            QPushButton { background:#192a1e; color:#eaf3ec; border:1px solid #42694a; padding:10px 15px; border-radius:2px; font-size:14px; }
+            QPushButton:checked, QPushButton#studio_primary { background:#55b93d; color:white; border-color:#83df64; font-weight:700; }
+            QPushButton#studio_back { background:#25382a; color:#f1f7f2; border:1px solid #68816c; font-weight:700; }
+            QComboBox, QLineEdit, QListWidget { background:#0b140f; color:#f3f7f4; border:1px solid #3a5943; padding:9px; font-size:15px; }
+            QListWidget::item { color:#edf5ef; padding:14px; border-bottom:1px solid #263c2d; }
+            QListWidget::item { color:#edf5ef; }
+            QListWidget::item:selected { background:#245634; color:#ffffff; border-left:4px solid #82df50; }
         ''')
         root = QtWidgets.QVBoxLayout(self)
-        root.setContentsMargins(18, 16, 18, 16)
-        root.setSpacing(12)
+        root.setContentsMargins(32, 20, 32, 18)
+        root.setSpacing(14)
+        header = QtWidgets.QFrame()
+        header.setObjectName('studio_header')
+        header_row = QtWidgets.QHBoxLayout(header)
+        header_row.setContentsMargins(14, 10, 12, 10)
+        header_row.setSpacing(14)
         title = QtWidgets.QLabel('AVATAR STUDIO')
         title.setObjectName('studio_title')
-        subtitle = QtWidgets.QLabel('Create a look, preview it in 3D, and equip your profile.')
+        header_row.addWidget(title)
+        brand = QtWidgets.QLabel('XBOX 360  /  PROFILE DESIGN')
+        brand.setObjectName('studio_brand')
+        header_row.addWidget(brand)
+        header_row.addStretch(1)
+        self.back_button = QtWidgets.QPushButton('B  BACK')
+        self.back_button.setObjectName('studio_back')
+        self.back_button.clicked.connect(self._back_or_close)
+        header_row.addWidget(self.back_button)
+        root.addWidget(header)
+        subtitle = QtWidgets.QLabel('Customize your avatar. Changes are saved to your local XUI profile.')
         subtitle.setObjectName('studio_muted')
-        root.addWidget(title)
         root.addWidget(subtitle)
         body = QtWidgets.QHBoxLayout()
         body.setSpacing(14)
@@ -9480,8 +9627,8 @@ class AvatarStudioDialog(QtWidgets.QDialog):
         self.creator_tab.setCheckable(True)
         self.store_tab = QtWidgets.QPushButton('Store')
         self.store_tab.setCheckable(True)
-        self.creator_tab.clicked.connect(lambda: self._show_mode(False))
-        self.store_tab.clicked.connect(lambda: self._show_mode(True))
+        self.creator_tab.clicked.connect(lambda: self._show_mode(False, sound=True))
+        self.store_tab.clicked.connect(lambda: self._show_mode(True, sound=True))
         tabs.addWidget(self.creator_tab)
         tabs.addWidget(self.store_tab)
         controls_layout.addLayout(tabs)
@@ -9510,7 +9657,7 @@ class AvatarStudioDialog(QtWidgets.QDialog):
         self.cosmetic_list = QtWidgets.QListWidget()
         for item in self.COSMETICS:
             owned = item['id'] in self._owned_ids()
-            suffix = '  /  OWNED' if owned else f"  /  {item['price']} credits"
+            suffix = '  /  OWNED' if owned else f"  /  {self._format_price(item['price'])}"
             entry = QtWidgets.QListWidgetItem(item['name'] + suffix)
             entry.setData(QtCore.Qt.UserRole, item['id'])
             self.cosmetic_list.addItem(entry)
@@ -9521,7 +9668,7 @@ class AvatarStudioDialog(QtWidgets.QDialog):
         store_layout.addWidget(self.balance_label)
         store_layout.addWidget(self.cosmetic_list, 1)
         store_layout.addWidget(self.buy_button)
-        self.cosmetic_list.currentRowChanged.connect(self._update_buy_button)
+        self.cosmetic_list.currentRowChanged.connect(self._on_cosmetic_changed)
         self.pages.addWidget(self.store_page)
         body.addWidget(controls, 6)
         root.addLayout(body, 1)
@@ -9532,10 +9679,48 @@ class AvatarStudioDialog(QtWidgets.QDialog):
         self.save_button.setObjectName('studio_primary')
         self.save_button.clicked.connect(self._save_avatar)
         close_button = QtWidgets.QPushButton('Close')
-        close_button.clicked.connect(self.reject)
+        close_button.clicked.connect(self._back_or_close)
         footer.addWidget(self.save_button)
         footer.addWidget(close_button)
         root.addLayout(footer)
+        hint = QtWidgets.QLabel('A  SELECT     B  BACK     ESC  CLOSE')
+        hint.setObjectName('studio_brand')
+        root.addWidget(hint, 0, QtCore.Qt.AlignRight)
+        QtWidgets.QShortcut(QtGui.QKeySequence(QtCore.Qt.Key_Escape), self, activated=self._back_or_close)
+        QtWidgets.QShortcut(QtGui.QKeySequence(QtCore.Qt.Key_Back), self, activated=self._back_or_close)
+        QtWidgets.QShortcut(QtGui.QKeySequence('B'), self, activated=self._back_or_close)
+
+    def _play_editor_sound(self, name):
+        path = ASSETS / f'{str(name or "").strip()}.mp3'
+        if not path.is_file():
+            if callable(self._sfx_cb):
+                try:
+                    self._sfx_cb(name)
+                except Exception:
+                    pass
+            return
+        if self._audio_player is not None:
+            try:
+                media = QtMultimedia.QMediaContent(QtCore.QUrl.fromLocalFile(str(path)))
+                self._audio_player.stop()
+                self._audio_player.setMedia(media)
+                self._audio_player.play()
+                return
+            except Exception:
+                pass
+        if callable(self._sfx_cb):
+            try:
+                self._sfx_cb(name)
+            except Exception:
+                pass
+
+    def _back_or_close(self):
+        self._play_editor_sound('back')
+        self.reject()
+
+    def _on_cosmetic_changed(self, *_args):
+        self._play_editor_sound('hover')
+        self._update_buy_button()
 
     def _add_combo(self, form, label, choices):
         combo = QtWidgets.QComboBox()
@@ -9572,28 +9757,58 @@ class AvatarStudioDialog(QtWidgets.QDialog):
         balance = safe_json_read(DATA_HOME / 'saldo.json', {'balance': 250, 'currency': 'credits'})
         if not isinstance(balance, dict):
             balance = {'balance': 250, 'currency': 'credits'}
-        self.balance_label.setText(f"Wallet: {float(balance.get('balance', 250) or 0):.0f} {balance.get('currency') or 'credits'}")
+        self.balance_label.setText(f"Wallet: {self._format_balance(balance)}")
+        selected_row = max(0, self.cosmetic_list.currentRow())
+        for index, item in enumerate(self.COSMETICS):
+            owned = item['id'] in self._owned_ids()
+            suffix = '  /  OWNED' if owned else f"  /  {self._format_price(item['price'], balance)}"
+            self.cosmetic_list.item(index).setText(item['name'] + suffix)
+        if self.cosmetic_list.count():
+            self.cosmetic_list.setCurrentRow(min(selected_row, self.cosmetic_list.count() - 1))
+
+    @staticmethod
+    def _currency(balance):
+        return str(balance.get('currency') or 'credits').strip()
+
+    @classmethod
+    def _format_price(cls, amount, balance=None):
+        if not isinstance(balance, dict):
+            balance = safe_json_read(DATA_HOME / 'saldo.json', {})
+        currency = cls._currency(balance if isinstance(balance, dict) else {})
+        return f'{float(amount):.0f} {currency}'
+
+    @classmethod
+    def _format_balance(cls, balance):
+        try:
+            amount = float(balance.get('balance', 0) or 0)
+        except (TypeError, ValueError):
+            amount = 0
+        return cls._format_price(amount, balance)
 
     def _select_field(self, key, combo):
         value = combo.currentData()
         if value is not None:
+            if self.avatar.get(key) != value:
+                self._play_editor_sound('hover')
             self.avatar[key] = value
             self._update_preview()
 
     def _update_preview(self):
         self.preview.set_avatar(self.avatar)
 
-    def _show_mode(self, store_mode):
+    def _show_mode(self, store_mode, sound=False):
         self._store_mode = bool(store_mode)
         self.pages.setCurrentWidget(self.store_page if self._store_mode else self.creator_page)
         self.creator_tab.setChecked(not self._store_mode)
         self.store_tab.setChecked(self._store_mode)
+        if sound:
+            self._play_editor_sound('open' if self._store_mode else 'select')
 
     def _update_buy_button(self, *_args):
         item = self._selected_cosmetic()
         if item:
             owned = item['id'] in self._owned_ids()
-            self.buy_button.setText('Equip item' if owned else f"Buy and equip  /  {item['price']} credits")
+            self.buy_button.setText('Equip item' if owned else f"Buy and equip  /  {self._format_price(item['price'])}")
 
     def _selected_cosmetic(self):
         current = self.cosmetic_list.currentItem()
@@ -9606,7 +9821,8 @@ class AvatarStudioDialog(QtWidgets.QDialog):
         if item is None:
             return
         owned = self._owned_ids()
-        if item['id'] not in owned:
+        purchased = item['id'] not in owned
+        if purchased:
             wallet_path = DATA_HOME / 'saldo.json'
             wallet = safe_json_read(wallet_path, {'balance': 250, 'currency': 'credits'})
             if not isinstance(wallet, dict):
@@ -9623,6 +9839,7 @@ class AvatarStudioDialog(QtWidgets.QDialog):
             owned.add(item['id'])
             self.avatar['owned'] = sorted(owned)
         self.avatar[item['field']] = item['value']
+        self._play_editor_sound('archievements' if purchased else 'select')
         self._sync_controls()
         self._save_profile_data()
         self._show_mode(False)
@@ -9634,6 +9851,7 @@ class AvatarStudioDialog(QtWidgets.QDialog):
         safe_json_write(PROFILE_FILE, self.profile)
 
     def _save_avatar(self):
+        self._play_editor_sound('select')
         self._save_profile_data()
         self.accept()
 
@@ -11762,8 +11980,9 @@ exit 1
         self._run('/bin/sh', ['-c', f'xdg-open "{u}"'])
 
     def _open_avatar_studio(self, store_mode=False):
-        self._play_sfx('open')
-        dialog = AvatarStudioDialog(self, store_mode=store_mode)
+        dialog = AvatarStudioDialog(self, store_mode=store_mode, sfx_cb=self._play_sfx)
+        dialog._play_editor_sound('open' if store_mode else 'startup')
+        dialog.showFullScreen()
         dialog.exec_()
         profile_data = safe_json_read(PROFILE_FILE, {})
         if isinstance(profile_data, dict):
